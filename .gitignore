@@ -1,0 +1,7 @@
+.venv
+db/
+incremental_db/
+build/
+*.old
+*.bak
+vunit_out/
