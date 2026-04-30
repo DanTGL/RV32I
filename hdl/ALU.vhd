@@ -37,7 +37,7 @@ architecture rtl of ALU is
   end function bool_to_sl;
 begin
 
-  alu : process(all)
+  alu_comb : process(all)
   begin
     case ALU_OP is
       when "000" =>                     -- Addition Operation
@@ -47,10 +47,10 @@ begin
         C_out <= A_in sll TO_INTEGER(unsigned(B_in));
 
       when "010" =>                     -- Set Less Than Operation (Signed)
-        C_out <= (others => '0') & bool_to_sl(signed(A_in) < signed(B_in));
+        C_out <= (BIT_SIZE-1 downto 1 => '0') & bool_to_sl(signed(A_in) < signed(B_in));
 
       when "011" =>                     -- Set Less Than Operation (Unsigned)
-        C_out <= (others => '0') & bool_to_sl(unsigned(A_in) < unsigned(B_in));
+        C_out <= (BIT_SIZE-1 downto 1 => '0') & bool_to_sl(unsigned(A_in) < unsigned(B_in));
 
       when "100" =>                     -- Exclusive OR Operation
         C_out <= A_in xor B_in;
@@ -63,7 +63,9 @@ begin
 
       when "111" =>                     -- AND Operation
         C_out <= A_in and B_in;
+
+      when others =>
     end case;
-  end process alu;
+  end process alu_comb;
 
 end architecture rtl;
