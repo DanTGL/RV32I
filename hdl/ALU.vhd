@@ -17,6 +17,8 @@ entity ALU is
     );
   port (
     ALU_OP : in  std_logic_vector(2 downto 0);
+    ALU_SW : in  std_logic;
+    IMM_OP : in  std_logic;
     A_in   : in  std_logic_vector(BIT_SIZE-1 downto 0);
     B_in   : in  std_logic_vector(BIT_SIZE-1 downto 0);
     C_out  : out std_logic_vector(BIT_SIZE-1 downto 0)
@@ -41,8 +43,11 @@ begin
   begin
     case ALU_OP is
       when "000" =>                     -- Addition Operation
-        C_out <= std_logic_vector(unsigned(A_in) + unsigned(B_in));
-
+        if IMM_OP = '1' and ALU_SW = '1' then
+          C_out <= std_logic_vector(signed(A_in) - signed(B_in));
+        else
+          C_out <= std_logic_vector(unsigned(A_in) + unsigned(B_in));
+        end if;
       when "001" =>                     -- Shift Left Logical Operation
         C_out <= A_in sll TO_INTEGER(unsigned(B_in));
 
@@ -56,7 +61,11 @@ begin
         C_out <= A_in xor B_in;
 
       when "101" =>                     -- Shift Right Logical Operation
-        C_out <= A_in srl to_integer(unsigned(B_in));
+        if ALU_SW = '1' then
+          C_out <= std_logic_vector(signed(A_in) sra to_integer(unsigned(B_in)));  -- Shift Right Arithmetic
+        else
+          C_out <= A_in srl to_integer(unsigned(B_in));  -- Shift Right Logical
+        end if;
 
       when "110" =>                     -- OR Operation
         C_out <= A_in or B_in;
@@ -65,6 +74,7 @@ begin
         C_out <= A_in and B_in;
 
       when others =>
+        C_out <= (others => '-');
     end case;
   end process alu_comb;
 

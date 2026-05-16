@@ -4,8 +4,8 @@ use IEEE.numeric_std.all;
 
 entity top is
   port (
-    CLK     : in std_logic;
-    RESET_n : in std_logic
+    clk     : in std_logic;
+    reset_n : in std_logic
     );
 end entity top;
 
@@ -13,12 +13,25 @@ architecture rtl of top is
   signal reset_n_t1, reset_n_t2 : std_logic;
 begin
 
-  reset_process : process(CLK, RESET_N)
+  CPU_inst : entity work.CPU
+    port map(
+      clk         => clk,
+      reset_n     => reset_n_t2,
+      i_code      => (others => '0'),
+      o_caddr     => open,
+      o_data_cs_n => open,
+      o_data_we_n => open,
+      i_data      => (others => '0'),
+      o_data      => open,
+      o_daddr     => open
+      );
+
+  reset_process : process(clk, reset_n)
   begin
-    if RESET_n = '0' then
+    if reset_n = '0' then
       reset_n_t1 <= '0';
       reset_n_t2 <= '0';
-    elsif rising_edge(CLK) then
+    elsif rising_edge(clk) then
       reset_n_t1 <= '1';
       reset_n_t2 <= reset_n_t1;
     end if;

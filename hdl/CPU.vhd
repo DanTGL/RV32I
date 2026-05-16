@@ -19,6 +19,7 @@ end entity CPU;
 architecture rtl of CPU is
 
   signal ALU_OP : std_logic_vector(2 downto 0);
+  signal ALU_IMM_OP : std_logic;
   signal ALU_A  : std_logic_vector(31 downto 0);
   signal ALU_B  : std_logic_vector(31 downto 0);
   signal ALU_C  : std_logic_vector(31 downto 0);
@@ -38,12 +39,12 @@ architecture rtl of CPU is
     );
 
   signal state : CPU_STATE;
-  type INSTRUCTION_FORMAT is (INST_FORMAT_I, INST_FORMAT_J, INST_FORMAT_S, INST_FORMAT_U, INST_FORMAT_B, INST_FORMAT_R);
+  type INSTRUCTION_FORMAT is (INST_FORMAT_I, INST_FORMAT_J, INST_FORMAT_S, INST_FORMAT_U, INST_FORMAT_B, INST_FORMAT_R, INST_FORMAT_INVALID);
 
   type INSTRUCTION_TYPE is (
-    INST_TYPE_LOAD, INST_TYPE_OP_IMM, INST_TYPE_AUIPC, INST_TYPE_OP_IMM_32,
-    INST_TYPE_STORE, INST_TYPE_OP, INST_TYPE_LUI, INST_TYPE_OP_32,
-    INST_TYPE_BRANCH, INST_TYPE_JALR, INST_TYPE_JAL, INST_TYPE_SYSTEM,
+    INST_TYPE_LOAD, INST_TYPE_OP_IMM, INST_TYPE_AUIPC, -- INST_TYPE_OP_IMM_32,
+    INST_TYPE_STORE, INST_TYPE_OP, INST_TYPE_LUI, -- INST_TYPE_OP_32,
+    INST_TYPE_BRANCH, INST_TYPE_JALR, INST_TYPE_JAL, -- INST_TYPE_SYSTEM,
     INST_TYPE_UNIMPL
   );
 
@@ -59,9 +60,15 @@ architecture rtl of CPU is
   end record INSTRUCTION;
 
   signal cur_instr : INSTRUCTION;
+
 begin
 
-  regs(0) <= (others => '0');
+  ALU_IMM_OP <= '1' when cur_instr.instr_format = INST_FORMAT_I else '0';
+
+  ALU_A <= regs(to_integer(unsigned(cur_instr.rs1)));
+  ALU_B <= regs(to_integer(unsigned(cur_instr.rs2))) when cur_instr.instr_format = INST_FORMAT_R else cur_instr.imm;
+  ALU_OP <= inst(14 downto 12);
+
 
   ALU_inst : entity work.ALU
     generic map(
@@ -69,13 +76,15 @@ begin
       )
     port map(
       ALU_OP => ALU_OP,
+      ALU_SW => inst(30), -- 5th bit of funct7 field
+      IMM_OP => ALU_IMM_OP,
       A_in   => ALU_A,
       B_in   => ALU_B,
       C_out  => ALU_C
       );
 
   -- TODO: Improve this
-  -- NOTE: Design was chosen as it should be simpler to expand 
+  -- NOTE: Design was chosen as it should be simpler to parallelize later on
   pipeline_process : process(clk, reset_n)
   begin
     if reset_n = '0' then
@@ -84,7 +93,8 @@ begin
       o_caddr     <= (others => '0');
       o_data_we_n <= '1';
       o_data_cs_n <= '1';
-
+      inst <= (others => '0');
+      regs <= (others => (others => '0'));
 
     elsif rising_edge(clk) then
       state       <= STATE_FETCH;
@@ -112,10 +122,14 @@ begin
 
           state <= STATE_REG_WB;
 
-        when STATE_REG_WB =>
+        when STATE_REG_WB => -- Register Write Back
+          if cur_instr.rd = "00000" then -- Writes to register 0 are ignored
+            regs(0) <= (others => '0');
+          else
+            regs(to_integer(unsigned(cur_instr.rd))) <= ALU_C;
+          end if;
           state <= STATE_FETCH;
 
-        when others =>
       end case;
     end if;
   end process pipeline_process;
@@ -124,19 +138,42 @@ begin
     cur_instr.instr_type <= INST_TYPE_LOAD  when  "00000",
                             INST_TYPE_OP_IMM when "00100",
                             INST_TYPE_AUIPC when  "00101",
-                            INST_TYPE_OP_IMM_32 when "00110",
+                            --INST_TYPE_OP_IMM_32 when "00110",
                             INST_TYPE_STORE when "01000",
                             INST_TYPE_OP when "01100",
                             INST_TYPE_LUI when "01101",
-                            INST_TYPE_OP_32 when "01110",
+                            --INST_TYPE_OP_32 when "01110",
                             INST_TYPE_BRANCH when "11000",
                             INST_TYPE_JALR when "11001",
                             INST_TYPE_JAL when "11011",
-                            INST_TYPE_SYSTEM when "11100",
+                            --INST_TYPE_SYSTEM when "11100",
                             INST_TYPE_UNIMPL when others;
+
+  with cur_instr.instr_type select
+    cur_instr.instr_format <= INST_FORMAT_I when INST_TYPE_LOAD | INST_TYPE_OP_IMM | INST_TYPE_JALR,
+                              INST_FORMAT_R when INST_TYPE_OP,
+                              INST_FORMAT_S when INST_TYPE_STORE,
+                              INST_FORMAT_B when INST_TYPE_BRANCH,
+                              INST_FORMAT_U when INST_TYPE_LUI | INST_TYPE_AUIPC,
+                              INST_FORMAT_J when INST_TYPE_JAL,
+                              INST_FORMAT_INVALID when INST_TYPE_UNIMPL;
+
+  with cur_instr.instr_format select
+    cur_instr.rd <= inst(11 downto 7) when INST_FORMAT_R | INST_FORMAT_I | INST_FORMAT_U | INST_FORMAT_J,
+                    (others => '0') when others;
+
+  with cur_instr.instr_format select
+    cur_instr.rs1 <= inst(19 downto 15) when INST_FORMAT_R | INST_FORMAT_I | INST_FORMAT_S | INST_FORMAT_B,
+                    (others => '0') when others;
+
+  with cur_instr.instr_format select
+    cur_instr.rs2 <= inst(24 downto 20) when INST_FORMAT_R | INST_FORMAT_S | INST_FORMAT_B,
+                    (others => '0') when others;
 
   immediate: process(all)
   begin
+    cur_instr.imm <= (others => '0');
+
     case cur_instr.instr_format is
       when INST_FORMAT_I =>
         cur_instr.imm <= (31 downto 11 => inst(31), 10 downto 0 => inst(30 downto 20));
