@@ -18,6 +18,16 @@ end entity CPU;
 
 architecture rtl of CPU is
 
+  pure function bool_to_sl(cond : boolean)
+    return std_logic is
+  begin
+    if cond then
+      return '1';
+    else
+      return '0';
+    end if;
+  end function bool_to_sl;
+
   signal ALU_OP : std_logic_vector(2 downto 0);
   signal ALU_IMM_OP : std_logic;
   signal ALU_A  : std_logic_vector(31 downto 0);
@@ -57,18 +67,21 @@ architecture rtl of CPU is
     rs2        : std_logic_vector(4 downto 0);
     rd         : std_logic_vector(4 downto 0);
     imm        : std_logic_vector(31 downto 0);
+    branch_cond: std_logic;
   end record INSTRUCTION;
 
   signal cur_instr : INSTRUCTION;
+  signal reg_a1 : std_logic_vector(31 downto 0); -- Purely here for debug purposes
 
 begin
+
+  reg_a1 <= regs(11);
 
   ALU_IMM_OP <= '1' when cur_instr.instr_format = INST_FORMAT_I else '0';
 
   ALU_A <= regs(to_integer(unsigned(cur_instr.rs1)));
   ALU_B <= regs(to_integer(unsigned(cur_instr.rs2))) when cur_instr.instr_format = INST_FORMAT_R else cur_instr.imm;
   ALU_OP <= inst(14 downto 12);
-
 
   ALU_inst : entity work.ALU
     generic map(
@@ -97,8 +110,6 @@ begin
       regs <= (others => (others => '0'));
 
     elsif rising_edge(clk) then
-      state       <= STATE_FETCH;
-      o_caddr     <= (others => '0');
       o_data_we_n <= '1';
       o_data_cs_n <= '1';
       PC          <= PC;
@@ -108,14 +119,12 @@ begin
         when STATE_FETCH =>
           o_caddr <= std_logic_vector(PC);
           state   <= STATE_DECODE;
-          PC      <= PC + 4;
 
         when STATE_DECODE =>
           inst  <= i_code;
           state <= STATE_EXECUTE;
 
         when STATE_EXECUTE =>
-          --ALU_OP <= inst(14 downto 12);
           state  <= STATE_MEM;
 
         when STATE_MEM =>
@@ -123,6 +132,11 @@ begin
           state <= STATE_REG_WB;
 
         when STATE_REG_WB => -- Register Write Back
+          PC <= PC + 4;
+          if cur_instr.instr_type = INST_TYPE_BRANCH and cur_instr.branch_cond = '1' then
+            PC <= PC + unsigned(cur_instr.imm);
+          end if;
+
           if cur_instr.rd = "00000" then -- Writes to register 0 are ignored
             regs(0) <= (others => '0');
           else
@@ -194,4 +208,33 @@ begin
         cur_instr.imm <= (others => '0');
     end case;
   end process immediate;
+
+
+  branch_cond: process(all)
+  begin
+    case ALU_OP is
+      when "000" => -- BEQ: Branch if Equal
+        cur_instr.branch_cond <= bool_to_sl(regs(to_integer(unsigned(cur_instr.rs1))) = regs(to_integer(unsigned(cur_instr.rs2))));
+
+      when "001" => -- BNE: Branch if Not Equal
+        cur_instr.branch_cond <= bool_to_sl(regs(to_integer(unsigned(cur_instr.rs1))) /= regs(to_integer(unsigned(cur_instr.rs2))));
+
+      when "100" => -- BLT: Branch if Less Than (signed)
+        cur_instr.branch_cond <= bool_to_sl(signed(regs(to_integer(unsigned(cur_instr.rs1)))) < signed(regs(to_integer(unsigned(cur_instr.rs2)))));
+
+      when "101" => -- BEQ: Branch if Greater than or Equal (signed)
+        cur_instr.branch_cond <= bool_to_sl(signed(regs(to_integer(unsigned(cur_instr.rs1)))) >= signed(regs(to_integer(unsigned(cur_instr.rs2)))));
+
+      when "110" => -- BLTU: Branch if Less Than (Unsigned)
+        cur_instr.branch_cond <= bool_to_sl(unsigned(regs(to_integer(unsigned(cur_instr.rs1)))) < unsigned(regs(to_integer(unsigned(cur_instr.rs2)))));
+
+      when "111" => -- BGEU: Branch if Greater than or Equal (Unsigned)
+        cur_instr.branch_cond <= bool_to_sl(unsigned(regs(to_integer(unsigned(cur_instr.rs1)))) >= unsigned(regs(to_integer(unsigned(cur_instr.rs2)))));
+
+      when others =>
+        cur_instr.branch_cond <= '0';
+
+    end case;
+
+  end process branch_cond;
 end architecture rtl;
