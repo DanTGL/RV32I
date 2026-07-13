@@ -2,6 +2,8 @@ library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
+use std.textio.all;
+
 library vunit_lib;
 context vunit_lib.vunit_context;
 
@@ -16,11 +18,16 @@ end entity top_tb;
 
 architecture rtl of top_tb is
 
+  signal rom : integer_array_t;
+
   signal OP        : std_logic_vector(2 downto 0);
   signal A, B, C   : std_logic_vector(31 downto 0);
   signal test_done : std_logic;
   signal clk       : std_logic := '0';
   signal reset_n   : std_logic := '0';
+  signal code : std_logic_vector(31 downto 0);
+  signal caddr : std_logic_vector(31 downto 0);
+
   component CPU
     port (
       clk         : in  std_logic;
@@ -68,14 +75,22 @@ begin
     port map(
       clk         => clk,
       reset_n     => reset_n,
-      i_code      => "000000000001" & "00001" & "000" & "00001" & "0010011",
-      o_caddr     => open,
+      i_code      => code,
+      o_caddr     => caddr,
       o_data_cs_n => open,
       o_data_we_n => open,
       i_data      => (others => '0'),
       o_data      => open,
       o_daddr     => open
       );
+  process(caddr, reset_n)
+  begin
+
+    if (reset_n = '1') then
+      code <= std_logic_vector(to_signed(get(rom, to_integer(unsigned(caddr)) / 4), code'length));
+    end if;
+
+  end process;
 
   main : process
     variable rnd : RandomPType;
@@ -85,6 +100,8 @@ begin
 
     reset_n <= '0';
     wait for 100 ns;
+
+    rom <= load_raw("test_code.bin", 32);
     reset_n <= '1';
     wait until rising_edge(clk);
 
@@ -98,7 +115,7 @@ begin
 
       elsif run("test_cpu") then -- TODO
         for i in 0 to 500 loop
-          --report to_string(i) & to_string(<<signal CPU_inst.reg1 : std_logic_vector(31 downto 0)>>);
+          report to_string(i) & " " & to_string(to_integer(unsigned(<<signal CPU_inst.reg_a1 : std_logic_vector(31 downto 0)>>)));
           wait until rising_edge(clk);
 
         end loop;
