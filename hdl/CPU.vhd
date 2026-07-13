@@ -54,8 +54,8 @@ architecture rtl of CPU is
   type INSTRUCTION_TYPE is (
     INST_TYPE_LOAD, INST_TYPE_OP_IMM, INST_TYPE_AUIPC, -- INST_TYPE_OP_IMM_32,
     INST_TYPE_STORE, INST_TYPE_OP, INST_TYPE_LUI, -- INST_TYPE_OP_32,
-    INST_TYPE_BRANCH, INST_TYPE_JALR, INST_TYPE_JAL, -- INST_TYPE_SYSTEM,
-    INST_TYPE_UNIMPL
+    INST_TYPE_BRANCH, INST_TYPE_JALR, INST_TYPE_JAL, INST_TYPE_SYSTEM,
+    INST_TYPE_MISC_MEM, INST_TYPE_UNIMPL
   );
 
   signal regs : REGISTERS_t;
@@ -150,6 +150,7 @@ begin
 
   with inst(6 downto 2) select
     cur_instr.instr_type <= INST_TYPE_LOAD  when  "00000",
+                            INST_TYPE_MISC_MEM when "00011",
                             INST_TYPE_OP_IMM when "00100",
                             INST_TYPE_AUIPC when  "00101",
                             --INST_TYPE_OP_IMM_32 when "00110",
@@ -160,11 +161,11 @@ begin
                             INST_TYPE_BRANCH when "11000",
                             INST_TYPE_JALR when "11001",
                             INST_TYPE_JAL when "11011",
-                            --INST_TYPE_SYSTEM when "11100",
+                            INST_TYPE_SYSTEM when "11100",
                             INST_TYPE_UNIMPL when others;
 
   with cur_instr.instr_type select
-    cur_instr.instr_format <= INST_FORMAT_I when INST_TYPE_LOAD | INST_TYPE_OP_IMM | INST_TYPE_JALR,
+    cur_instr.instr_format <= INST_FORMAT_I when INST_TYPE_LOAD | INST_TYPE_OP_IMM | INST_TYPE_JALR | INST_TYPE_SYSTEM | INST_TYPE_MISC_MEM,
                               INST_FORMAT_R when INST_TYPE_OP,
                               INST_FORMAT_S when INST_TYPE_STORE,
                               INST_FORMAT_B when INST_TYPE_BRANCH,
