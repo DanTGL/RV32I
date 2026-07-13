@@ -38,6 +38,8 @@ architecture rtl of CPU is
 
   signal inst : std_logic_vector(31 downto 0);
 
+  signal mem_en : std_logic;
+
   type REGISTERS_t is array (0 to 31) of std_logic_vector(31 downto 0);
 
   type CPU_STATE is (
@@ -106,6 +108,9 @@ begin
       o_caddr     <= (others => '0');
       o_data_we_n <= '1';
       o_data_cs_n <= '1';
+      o_data      <= (others => '0');
+      o_daddr     <= (others => '0');
+      mem_en      <= '0';
       inst <= (others => '0');
       regs <= (others => (others => '0'));
 
@@ -114,6 +119,7 @@ begin
       o_data_cs_n <= '1';
       PC          <= PC;
       inst        <= inst;
+      mem_en      <= '0';
 
       case state is
         when STATE_FETCH =>
@@ -128,6 +134,19 @@ begin
           state  <= STATE_MEM;
 
         when STATE_MEM =>
+          if cur_instr.instr_type = INST_TYPE_LOAD then
+            mem_en <= '1';
+            o_data_we_n <= '1';
+            o_data_cs_n <= '0';
+            o_daddr <= std_logic_vector(unsigned(regs(to_integer(unsigned(cur_instr.rs1)))) + unsigned(cur_instr.imm));
+
+          elsif cur_instr.instr_type = INST_TYPE_STORE then
+            mem_en <= '1';
+            o_data_we_n <= '0';
+            o_data_cs_n <= '0';
+            o_daddr <= std_logic_vector(unsigned(regs(to_integer(unsigned(cur_instr.rs1)))) + unsigned(cur_instr.imm));
+            o_data <= regs(to_integer(unsigned(cur_instr.rs2))); -- TODO:
+           end if;
 
           state <= STATE_REG_WB;
 
@@ -140,7 +159,11 @@ begin
           if cur_instr.rd = "00000" then -- Writes to register 0 are ignored
             regs(0) <= (others => '0');
           else
-            regs(to_integer(unsigned(cur_instr.rd))) <= ALU_C;
+            if cur_instr.instr_type = INST_TYPE_LOAD then -- TODO: Wait for valid data
+              regs(to_integer(unsigned(cur_instr.rd))) <= i_data;
+            else
+              regs(to_integer(unsigned(cur_instr.rd))) <= ALU_C;
+            end if;
           end if;
           state <= STATE_FETCH;
 
