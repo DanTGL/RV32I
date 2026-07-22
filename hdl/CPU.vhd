@@ -13,7 +13,8 @@ entity CPU is
     o_data_cnt  : out std_logic_vector(2 downto 0);
     i_data      : in  std_logic_vector(31 downto 0);
     o_data      : out std_logic_vector(31 downto 0);
-    o_daddr     : out std_logic_vector(31 downto 0)
+    o_daddr     : out std_logic_vector(31 downto 0);
+    o_trap      : out std_logic
     );
 end entity CPU;
 
@@ -116,6 +117,7 @@ begin
       regs <= (others => (others => '0'));
       ALU_A <= (others => '0');
       ALU_B <= (others => '0');
+      o_trap <= '0';
     elsif rising_edge(clk) then
       o_data_we_n <= '1';
       o_data_cs_n <= '1';
@@ -159,7 +161,7 @@ begin
         when STATE_REG_WB => -- Register Write Back
           PC <= PC + 4;
           if cur_instr.instr_type = INST_TYPE_SYSTEM then
-            assert false report "EBREAK/SBREAK" severity FAILURE;
+            o_trap <= '1';
           end if;
           if cur_instr.instr_type = INST_TYPE_JAL or (cur_instr.instr_type = INST_TYPE_BRANCH and cur_instr.branch_cond = '1') then
             PC <= PC + unsigned(cur_instr.imm);

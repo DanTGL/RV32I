@@ -23,7 +23,8 @@ begin
       o_data_we_n => open,
       i_data      => (others => '0'),
       o_data      => open,
-      o_daddr     => open
+      o_daddr     => open,
+      o_trap      => open
       );
 
   reset_process : process(clk, reset_n)

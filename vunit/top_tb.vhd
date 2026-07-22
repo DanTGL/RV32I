@@ -51,6 +51,7 @@ architecture rtl of top_tb is
   signal data_cs_n, data_we_n : std_logic;
   signal data_cnt : std_logic_vector(2 downto 0);
   signal data_width : integer;
+  signal trap : std_logic;
 
   signal reset_n_t1, reset_n_t2 : std_logic;
 
@@ -65,7 +66,8 @@ architecture rtl of top_tb is
       o_data_cnt  : out std_logic_vector(2 downto 0);
       i_data      : in  std_logic_vector(31 downto 0);
       o_data      : out std_logic_vector(31 downto 0);
-      o_daddr     : out std_logic_vector(31 downto 0)
+      o_daddr     : out std_logic_vector(31 downto 0);
+      o_trap      : out std_logic
       );
   end component CPU;
 
@@ -109,7 +111,8 @@ begin
       o_data_cnt  => data_cnt,
       i_data      => data_read,
       o_data      => data_write,
-      o_daddr     => daddr
+      o_daddr     => daddr,
+      o_trap      => trap
       );
 
   reset_process: process(clk, reset_n)
@@ -180,9 +183,8 @@ begin
         check_equal(to_integer_string(C), to_integer_string(std_logic_vector(unsigned(A)+unsigned(B))), "A=" & to_integer_string(A) & "B=" & to_integer_string(B));
 
       elsif run("test_cpu") then -- TODO
-        while true loop
+        while trap /= '1' loop
           wait until rising_edge(clk);
-
         end loop;
 
       end if;
