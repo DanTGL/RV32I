@@ -1,0 +1,3 @@
+Tests from https://github.com/riscv/riscv-tests/tree/master/isa/rv32ui
+
+With some modifications from https://github.com/YosysHQ/picorv32/tree/main/tests

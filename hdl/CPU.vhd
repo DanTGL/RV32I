@@ -10,6 +10,7 @@ entity CPU is
     o_caddr     : out std_logic_vector(31 downto 0);
     o_data_cs_n : out std_logic;
     o_data_we_n : out std_logic;
+    o_data_cnt  : out std_logic_vector(2 downto 0);
     i_data      : in  std_logic_vector(31 downto 0);
     o_data      : out std_logic_vector(31 downto 0);
     o_daddr     : out std_logic_vector(31 downto 0)
@@ -73,17 +74,16 @@ architecture rtl of CPU is
   end record INSTRUCTION;
 
   signal cur_instr : INSTRUCTION;
-  signal reg_a1 : std_logic_vector(31 downto 0); -- Purely here for debug purposes
+
+  signal bit_count : natural;
 
 begin
 
-  reg_a1 <= regs(11);
-
   ALU_IMM_OP <= '1' when cur_instr.instr_format = INST_FORMAT_I else '0';
 
-  ALU_A <= regs(to_integer(unsigned(cur_instr.rs1)));
-  ALU_B <= regs(to_integer(unsigned(cur_instr.rs2))) when cur_instr.instr_format = INST_FORMAT_R else cur_instr.imm;
   ALU_OP <= inst(14 downto 12);
+
+  with inst(13 downto 12) select bit_count <= 8 when "00", 16 when "01", 32 when "10", 0 when others;
 
   ALU_inst : entity work.ALU
     generic map(
@@ -110,17 +110,19 @@ begin
       o_data_cs_n <= '1';
       o_data      <= (others => '0');
       o_daddr     <= (others => '0');
+      o_data_cnt  <= (others => '0');
       mem_en      <= '0';
       inst <= (others => '0');
       regs <= (others => (others => '0'));
-
+      ALU_A <= (others => '0');
+      ALU_B <= (others => '0');
     elsif rising_edge(clk) then
       o_data_we_n <= '1';
       o_data_cs_n <= '1';
+      o_daddr <= (others => '0');
       PC          <= PC;
       inst        <= inst;
       mem_en      <= '0';
-
       case state is
         when STATE_FETCH =>
           o_caddr <= std_logic_vector(PC);
@@ -131,6 +133,8 @@ begin
           state <= STATE_EXECUTE;
 
         when STATE_EXECUTE =>
+          ALU_A <= regs(to_integer(unsigned(cur_instr.rs1)));
+          ALU_B <= regs(to_integer(unsigned(cur_instr.rs2))) when cur_instr.instr_format = INST_FORMAT_R else cur_instr.imm;
           state  <= STATE_MEM;
 
         when STATE_MEM =>
@@ -138,6 +142,7 @@ begin
             mem_en <= '1';
             o_data_we_n <= '1';
             o_data_cs_n <= '0';
+            o_data_cnt <= inst(14 downto 12);
             o_daddr <= std_logic_vector(unsigned(regs(to_integer(unsigned(cur_instr.rs1)))) + unsigned(cur_instr.imm));
 
           elsif cur_instr.instr_type = INST_TYPE_STORE then
@@ -146,21 +151,37 @@ begin
             o_data_cs_n <= '0';
             o_daddr <= std_logic_vector(unsigned(regs(to_integer(unsigned(cur_instr.rs1)))) + unsigned(cur_instr.imm));
             o_data <= regs(to_integer(unsigned(cur_instr.rs2))); -- TODO:
+            o_data_cnt <= inst(14 downto 12);
            end if;
 
           state <= STATE_REG_WB;
 
         when STATE_REG_WB => -- Register Write Back
           PC <= PC + 4;
-          if cur_instr.instr_type = INST_TYPE_BRANCH and cur_instr.branch_cond = '1' then
+          if cur_instr.instr_type = INST_TYPE_SYSTEM then
+            assert false report "EBREAK/SBREAK" severity FAILURE;
+          end if;
+          if cur_instr.instr_type = INST_TYPE_JAL or (cur_instr.instr_type = INST_TYPE_BRANCH and cur_instr.branch_cond = '1') then
             PC <= PC + unsigned(cur_instr.imm);
+          elsif cur_instr.instr_type = INST_TYPE_JALR then
+            PC <= unsigned(ALU_C(31 downto 1) & '0');
           end if;
 
           if cur_instr.rd = "00000" then -- Writes to register 0 are ignored
             regs(0) <= (others => '0');
           else
-            if cur_instr.instr_type = INST_TYPE_LOAD then -- TODO: Wait for valid data
-              regs(to_integer(unsigned(cur_instr.rd))) <= i_data;
+            if cur_instr.instr_type = INST_TYPE_LUI then
+              regs(to_integer(unsigned(cur_instr.rd))) <= cur_instr.imm;
+            elsif cur_instr.instr_type = INST_TYPE_AUIPC then
+              regs(to_integer(unsigned(cur_instr.rd))) <= std_logic_vector(PC + unsigned(cur_instr.imm));
+            elsif cur_instr.instr_type = INST_TYPE_JAL or cur_instr.instr_type = INST_TYPE_JALR then
+              regs(to_integer(unsigned(cur_instr.rd))) <= std_logic_vector(PC + 4);
+            elsif cur_instr.instr_type = INST_TYPE_LOAD then -- TODO: Wait for valid data
+              if inst(14) = '0' and i_data(bit_count-1) = '1' then
+                regs(to_integer(unsigned(cur_instr.rd))) <= (31 downto bit_count => '1') & i_data(bit_count-1 downto 0);
+              else
+                regs(to_integer(unsigned(cur_instr.rd))) <= (31 downto bit_count => '0') & i_data(bit_count-1 downto 0);
+              end if;
             else
               regs(to_integer(unsigned(cur_instr.rd))) <= ALU_C;
             end if;

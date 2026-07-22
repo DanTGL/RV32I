@@ -5,6 +5,7 @@ if __name__ == "__main__":
 
     vu.add_vhdl_builtins()
     vu.add_osvvm()
+    vu.add_verification_components()
 
     lib = vu.add_library("lib")
     lib.add_source_files("hdl/*.vhd")
