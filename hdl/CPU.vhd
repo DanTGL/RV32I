@@ -76,7 +76,7 @@ architecture rtl of CPU is
 
   signal cur_instr : INSTRUCTION;
 
-  signal bit_count : natural;
+  signal bit_count : natural range 0 to 32;
 
 begin
 
@@ -179,11 +179,17 @@ begin
             elsif cur_instr.instr_type = INST_TYPE_JAL or cur_instr.instr_type = INST_TYPE_JALR then
               regs(to_integer(unsigned(cur_instr.rd))) <= std_logic_vector(PC + 4);
             elsif cur_instr.instr_type = INST_TYPE_LOAD then -- TODO: Wait for valid data
-              if inst(14) = '0' and i_data(bit_count-1) = '1' then
-                regs(to_integer(unsigned(cur_instr.rd))) <= (31 downto bit_count => '1') & i_data(bit_count-1 downto 0);
-              else
-                regs(to_integer(unsigned(cur_instr.rd))) <= (31 downto bit_count => '0') & i_data(bit_count-1 downto 0);
+              if inst(14) = '0' then
+                regs(to_integer(unsigned(cur_instr.rd)))(31 downto 0) <= (others => i_data(bit_count-1));
+              elsif inst(14) = '1' then
+                regs(to_integer(unsigned(cur_instr.rd)))(31 downto 0) <= (others => '0');
               end if;
+
+              for i in 0 to 3 loop
+                if bit_count > i*8 then
+                  regs(to_integer(unsigned(cur_instr.rd)))(i*8+7 downto i*8) <= (i_data(i*8+7 downto i*8));
+                end if;
+              end loop;
             else
               regs(to_integer(unsigned(cur_instr.rd))) <= ALU_C;
             end if;
