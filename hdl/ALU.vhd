@@ -49,7 +49,7 @@ begin
           C_out <= std_logic_vector(unsigned(A_in) + unsigned(B_in));
         end if;
       when "001" =>                     -- Shift Left Logical Operation
-        C_out <= A_in sll TO_INTEGER(unsigned(B_in(4 downto 0)));
+        C_out <= std_logic_vector(shift_left(unsigned(A_in), to_integer(unsigned(B_in(4 downto 0)))));
 
       when "010" =>                     -- Set Less Than Operation (Signed)
         C_out <= (BIT_SIZE-1 downto 1 => '0') & bool_to_sl(signed(A_in) < signed(B_in));
@@ -62,9 +62,9 @@ begin
 
       when "101" =>                     -- Shift Right Logical Operation
         if ALU_SW = '1' then
-          C_out <= std_logic_vector(signed(A_in) sra to_integer(unsigned(B_in(4 downto 0))));  -- Shift Right Arithmetic
+          C_out <= std_logic_vector(shift_right(signed(A_in), to_integer(unsigned(B_in(4 downto 0)))));  -- Shift Right Arithmetic
         else
-          C_out <= A_in srl to_integer(unsigned(B_in(4 downto 0)));  -- Shift Right Logical
+          C_out <= std_logic_vector(shift_right(unsigned(A_in), to_integer(unsigned(B_in(4 downto 0)))));  -- Shift Right Logical
         end if;
 
       when "110" =>                     -- OR Operation
