@@ -8,9 +8,11 @@ entity CPU is
     reset_n     : in  std_logic;
     i_code      : in  std_logic_vector(31 downto 0);
     o_caddr     : out std_logic_vector(31 downto 0);
-    o_data_cs_n : out std_logic;
-    o_data_we_n : out std_logic;
-    o_data_cnt  : out std_logic_vector(2 downto 0);
+    o_wb_cyc    : out std_logic;
+    o_wb_we     : out std_logic;
+    o_wb_stb    : out std_logic;
+    o_wb_sel    : out std_logic_vector(1 downto 0);
+    i_wb_ack    : in std_logic;
     i_data      : in  std_logic_vector(31 downto 0);
     o_data      : out std_logic_vector(31 downto 0);
     o_daddr     : out std_logic_vector(31 downto 0);
@@ -39,8 +41,6 @@ architecture rtl of CPU is
   signal PC : unsigned(31 downto 0);
 
   signal inst : std_logic_vector(31 downto 0);
-
-  signal mem_en : std_logic;
 
   type REGISTERS_t is array (0 to 31) of std_logic_vector(31 downto 0);
 
@@ -107,24 +107,24 @@ begin
       state       <= STATE_FETCH;
       PC          <= (others => '0');
       o_caddr     <= (others => '0');
-      o_data_we_n <= '1';
-      o_data_cs_n <= '1';
+      o_wb_we     <= '0';
+      o_wb_cyc    <= '0';
+      o_wb_stb    <= '0';
+      o_wb_sel  <= (others => '0');
       o_data      <= (others => '0');
       o_daddr     <= (others => '0');
-      o_data_cnt  <= (others => '0');
-      mem_en      <= '0';
       inst <= (others => '0');
       regs <= (others => (others => '0'));
       ALU_A <= (others => '0');
       ALU_B <= (others => '0');
       o_trap <= '0';
     elsif rising_edge(clk) then
-      o_data_we_n <= '1';
-      o_data_cs_n <= '1';
-      o_daddr <= (others => '0');
-      PC          <= PC;
-      inst        <= inst;
-      mem_en      <= '0';
+      --o_data_we_n <= '1';
+      --o_data_cs_n <= '1';
+      --o_daddr <= (others => '0');
+      --PC          <= PC;
+      --inst        <= inst;
+      --mem_en      <= '0';
       case state is
         when STATE_FETCH =>
           o_caddr <= std_logic_vector(PC);
@@ -141,24 +141,25 @@ begin
 
         when STATE_MEM =>
           if cur_instr.instr_type = INST_TYPE_LOAD then
-            mem_en <= '1';
-            o_data_we_n <= '1';
-            o_data_cs_n <= '0';
-            o_data_cnt <= inst(14 downto 12);
+            o_wb_we <= '0';
+            o_wb_cyc <= '1';
+            o_wb_stb <= '1';
+            o_wb_sel <= inst(13 downto 12);
             o_daddr <= std_logic_vector(unsigned(regs(to_integer(unsigned(cur_instr.rs1)))) + unsigned(cur_instr.imm));
 
           elsif cur_instr.instr_type = INST_TYPE_STORE then
-            mem_en <= '1';
-            o_data_we_n <= '0';
-            o_data_cs_n <= '0';
+            o_wb_we <= '1';
+            o_wb_cyc <= '1';
+            o_wb_stb <= '1';
             o_daddr <= std_logic_vector(unsigned(regs(to_integer(unsigned(cur_instr.rs1)))) + unsigned(cur_instr.imm));
             o_data <= regs(to_integer(unsigned(cur_instr.rs2))); -- TODO:
-            o_data_cnt <= inst(14 downto 12);
+            o_wb_sel <= inst(13 downto 12);
            end if;
 
           state <= STATE_REG_WB;
 
         when STATE_REG_WB => -- Register Write Back
+
           PC <= PC + 4;
           if cur_instr.instr_type = INST_TYPE_SYSTEM then
             o_trap <= '1';
